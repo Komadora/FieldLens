@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0d1117">
+  <link rel="manifest" href="manifest.json">
+  <title>FieldLens</title>
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+    :root, [data-theme="dark"] {
+      --bg: #0d1117; --surface: #161b22; --border: #21262d;
+      --text: #e6edf3; --muted: #7d8590;
+      --green: #10b981; --blue: #388bfd; --red: #f85149; --yellow: #f59e0b;
+      --grid: rgba(255,255,255,.05);
+    }
+    [data-theme="light"] {
+      --bg: #f5f7f5; --surface: #ffffff; --border: #d0d7de;
+      --text: #1f2328; --muted: #656d76;
+      --green: #059669; --blue: #0969da; --red: #cf222e; --yellow: #9a6700;
+      --grid: rgba(0,0,0,.06);
+    }
+
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-height: 100dvh; display: flex; flex-direction: column; }
+
+    .screen { flex: 1; display: none; flex-direction: column; }
+    .screen.active { display: flex; }
+
+    /* ── HEADER ── */
+    .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 16px; display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 10; }
+    .back-btn { background: none; border: none; color: var(--green); font-size: 1.5rem; cursor: pointer; padding: 2px 8px 2px 0; line-height: 1; }
+    .header-text { flex: 1; min-width: 0; }
+    .header-title { font-size: .98rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .header-sub { font-size: .73rem; color: var(--muted); margin-top: 2px; }
+    .header-action { background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 7px 12px; font-size: .8rem; font-weight: 600; cursor: pointer; font-family: inherit; white-space: nowrap; flex-shrink: 0; }
+
+    /* ── UPLOAD ── */
+    #screen-upload { justify-content: center; align-items: center; padding: 28px 20px; gap: 18px; }
+    .brand { text-align: center; }
+    .brand-icon { font-size: 3.8rem; display: block; margin-bottom: 8px; }
+    .brand-name { font-size: 2.2rem; font-weight: 800; color: var(--green); letter-spacing: -.03em; }
+    .brand-tag { font-size: .85rem; color: var(--muted); margin-top: 4px; }
+
+    .drop-zone { width: 100%; max-width: 420px; border: 2px dashed var(--border); border-radius: 16px; padding: 36px 20px; text-align: center; cursor: pointer; transition: all .2s; background: var(--surface); }
+    .drop-zone:hover, .drop-zone.drag-over { border-color: var(--green); background: rgba(16,185,129,.05); }
+    .dz-icon { font-size: 2.2rem; display: block; margin-bottom: 10px; }
+    .dz-title { font-size: .98rem; font-weight: 600; margin-bottom: 5px; }
+    .dz-sub { font-size: .82rem; color: var(--muted); }
+    .dz-fmt { font-size: .73rem; color: var(--muted); margin-top: 8px; background: var(--bg); display: inline-block; padding: 3px 10px; border-radius: 20px; border: 1px solid var(--border); }
+
+    .btn { border: none; border-radius: 10px; padding: 13px 16px; font-size: .95rem; font-weight: 600; cursor: pointer; font-family: inherit; width: 100%; max-width: 420px; transition: opacity .15s; }
+    .btn:active { opacity: .7; }
+    .btn-outline { background: transparent; color: var(--green); border: 2px solid var(--green); }
+
+    .bottom-bars { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 420px; }
+    .seg-bar { display: flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+    .seg-btn { flex: 1; padding: 9px 4px; text-align: center; font-size: .82rem; font-weight: 600; cursor: pointer; background: var(--bg); color: var(--muted); border: none; font-family: inherit; transition: all .15s; }
+    .seg-btn.active { background: var(--green); color: #fff; }
+
+    input[type=file] { display: none; }
+
+    /* ── DASHBOARD ── */
+    #screen-dash { overflow-y: auto; }
+    .dash-body { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+
+    .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+    .stat-label { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; font-weight: 700; margin-bottom: 6px; }
+    .stat-value { font-size: 1.9rem; font-weight: 800; color: var(--green); line-height: 1; }
+    .stat-sub { font-size: .73rem; color: var(--muted); margin-top: 4px; }
+
+    .tabs { display: flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+    .tab { flex: 1; padding: 10px; text-align: center; font-size: .88rem; font-weight: 600; cursor: pointer; background: var(--bg); color: var(--muted); border: none; font-family: inherit; transition: all .15s; }
+    .tab.active { background: var(--green); color: #fff; }
+
+    /* ── FULL TABLE ── */
+    .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--border); border-radius: 12px; }
+    table { border-collapse: collapse; font-size: .83rem; min-width: 100%; width: max-content; }
+    th { background: var(--surface); color: var(--muted); font-weight: 700; font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; padding: 10px 13px; text-align: left; white-space: nowrap; border-bottom: 1px solid var(--border); }
+    td { padding: 10px 13px; text-align: left; white-space: nowrap; border-bottom: 1px solid var(--border); }
+    tr:last-child td { border-bottom: none; }
+    tr:nth-child(even) td { background: rgba(128,128,128,.03); }
+    tr[data-idx]:hover td { background: rgba(16,185,129,.05); cursor: pointer; }
+    .trt-no { background: rgba(16,185,129,.12); color: var(--green); font-weight: 800; border-radius: 6px; padding: 3px 9px; font-size: .8rem; display: inline-block; }
+    .type-badge { background: var(--bg); border: 1px solid var(--border); border-radius: 20px; padding: 2px 9px; font-size: .74rem; font-weight: 600; color: var(--muted); }
+    .hint { font-size: .73rem; color: var(--muted); text-align: center; padding: 6px 0 2px; }
+
+    /* ── PIVOT GRID ── */
+    .pivot-header { font-size: .78rem; color: var(--muted); padding: 2px 0 8px; }
+    .pivot-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .pivot-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px; cursor: pointer; transition: all .15s; position: relative; overflow: hidden; }
+    .pivot-card:hover { border-color: var(--green); transform: translateY(-1px); }
+    .pivot-card:active { opacity: .7; transform: none; }
+    .pivot-card-label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; font-weight: 700; margin-bottom: 6px; }
+    .pivot-card-value { font-size: 1.4rem; font-weight: 800; line-height: 1; margin-bottom: 4px; }
+    .pivot-card-sub { font-size: .72rem; color: var(--muted); }
+    .pivot-type-dot { position: absolute; top: 12px; right: 12px; width: 8px; height: 8px; border-radius: 50%; }
+
+    /* ── METRIC SCREEN ── */
+    #screen-metric { overflow-y: auto; }
+    .metric-body { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+
+    .mini-stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    .mini-stat { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 8px; text-align: center; }
+    .mini-stat-label { font-size: .65rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; font-weight: 700; margin-bottom: 4px; }
+    .mini-stat-val { font-size: 1.1rem; font-weight: 800; color: var(--green); line-height: 1; }
+
+    .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+    .chart-title { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; font-weight: 700; margin-bottom: 12px; }
+    .chart-card canvas { max-height: 320px; }
+
+    .freq-table-wrap { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+    .freq-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+    .freq-table th { background: var(--surface); color: var(--muted); font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; padding: 9px 13px; text-align: left; border-bottom: 1px solid var(--border); font-weight: 700; }
+    .freq-table td { padding: 10px 13px; border-bottom: 1px solid var(--border); }
+    .freq-table tr:last-child td { border-bottom: none; }
+    .freq-table tr:nth-child(even) td { background: rgba(128,128,128,.03); }
+    .freq-bar-bg { background: var(--border); border-radius: 3px; height: 5px; margin-top: 4px; overflow: hidden; }
+    .freq-bar-fill { height: 100%; border-radius: 3px; background: var(--green); }
+
+    .data-section-title { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; font-weight: 700; padding: 4px 0 8px; }
+
+    .text-list { display: flex; flex-direction: column; gap: 8px; }
+    .text-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; display: flex; align-items: center; gap: 12px; }
+    .text-item-no { background: rgba(16,185,129,.12); color: var(--green); font-weight: 800; border-radius: 6px; padding: 3px 9px; font-size: .8rem; flex-shrink: 0; }
+    .text-item-name { font-size: .8rem; color: var(--muted); }
+    .text-item-val { font-size: .9rem; font-weight: 600; margin-top: 2px; }
+
+    /* ── MODAL ── */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.65); z-index: 100; display: none; align-items: flex-end; justify-content: center; }
+    .modal-overlay.open { display: flex; }
+    .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 20px 20px 0 0; padding: 20px 20px 32px; width: 100%; max-width: 600px; max-height: 82dvh; overflow-y: auto; }
+    .modal-handle { width: 40px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto 18px; }
+    .modal-trt-name { font-size: 1.05rem; font-weight: 700; color: var(--green); margin-bottom: 4px; }
+    .modal-trt-label { font-size: .8rem; color: var(--muted); margin-bottom: 16px; }
+    .detail-row { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: .87rem; }
+    .detail-row:last-child { border-bottom: none; }
+    .detail-key { color: var(--muted); flex: 1; }
+    .detail-val { font-weight: 600; text-align: right; flex: 1; word-break: break-word; }
+
+    .empty-state { text-align: center; color: var(--muted); padding: 40px 20px; font-size: .9rem; line-height: 1.8; }
+
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+  </style>
+</head>
+<body>
+
+<!-- ═══ UPLOAD ═══ -->
+<div class="screen active" id="screen-upload">
+  <div class="brand">
+    <span class="brand-icon">🔬</span>
+    <div class="brand-name">FieldLens</div>
+    <div class="brand-tag" data-i18n="brandTag"></div>
+  </div>
+  <div class="drop-zone" id="drop-zone">
+    <span class="dz-icon">📊</span>
+    <div class="dz-title" data-i18n="dzTitle"></div>
+    <div class="dz-sub"   data-i18n="dzSub"></div>
+    <span class="dz-fmt">.xlsx · .xls</span>
+  </div>
+  <input type="file" id="file-input" accept=".xlsx,.xls">
+  <button class="btn btn-outline" id="btn-demo" data-i18n="btnDemo"></button>
+  <div class="bottom-bars">
+    <div class="seg-bar" id="lang-bar">
+      <button class="seg-btn" data-lang="tr">🇹🇷 TR</button>
+      <button class="seg-btn" data-lang="en">🇬🇧 EN</button>
+      <button class="seg-btn" data-lang="es">🇪🇸 ES</button>
+    </div>
+    <div class="seg-bar">
+      <button class="seg-btn" data-theme="light" data-i18n="themeLight"></button>
+      <button class="seg-btn" data-theme="auto"  data-i18n="themeAuto"></button>
+      <button class="seg-btn" data-theme="dark"  data-i18n="themeDark"></button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ DASHBOARD ═══ -->
+<div class="screen" id="screen-dash">
+  <div class="header">
+    <button class="back-btn" id="back-btn">‹</button>
+    <div class="header-text">
+      <div class="header-title" id="dash-title">FieldLens</div>
+      <div class="header-sub"   id="dash-sub">—</div>
+    </div>
+    <button class="header-action" id="btn-new-file" data-i18n="btnNewFile"></button>
+  </div>
+  <div class="dash-body">
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-label" data-i18n="statTrt"></div>
+        <div class="stat-value" id="s-trt">—</div>
+        <div class="stat-sub"   data-i18n="statTrtSub"></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label" data-i18n="statType"></div>
+        <div class="stat-value" id="s-type">—</div>
+        <div class="stat-sub"   data-i18n="statTypeSub"></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label" data-i18n="statTiming"></div>
+        <div class="stat-value" id="s-timing">—</div>
+        <div class="stat-sub"   data-i18n="statTimingSub"></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label" data-i18n="statRate"></div>
+        <div class="stat-value" id="s-rate">—</div>
+        <div class="stat-sub"   id="s-rate-unit">—</div>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" id="tab-table"  onclick="switchTab('table')"  data-i18n="tabTable"></button>
+      <button class="tab"        id="tab-pivot"  onclick="switchTab('pivot')"  data-i18n="tabAnalysis"></button>
+    </div>
+
+    <!-- TABLE PANEL -->
+    <div id="panel-table">
+      <div class="table-wrap">
+        <table><thead id="trt-thead"></thead><tbody id="trt-tbody"></tbody></table>
+      </div>
+      <div class="hint" data-i18n="rowHint"></div>
+    </div>
+
+    <!-- PIVOT PANEL -->
+    <div id="panel-pivot" style="display:none">
+      <div class="pivot-header" data-i18n="pivotHint"></div>
+      <div class="pivot-grid" id="pivot-grid"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ METRIC DETAIL ═══ -->
+<div class="screen" id="screen-metric">
+  <div class="header">
+    <button class="back-btn" id="metric-back">‹</button>
+    <div class="header-text">
+      <div class="header-title" id="metric-title">—</div>
+      <div class="header-sub"   id="metric-sub">—</div>
+    </div>
+  </div>
+  <div class="metric-body" id="metric-body"></div>
+</div>
+
+<!-- ═══ DETAIL MODAL ═══ -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-trt-name" id="modal-name">—</div>
+    <div class="modal-trt-label" id="modal-label"></div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════
+//  TRANSLATIONS
+// ══════════════════════════════════════════════
+const LANG = {
+  tr: {
+    brandTag:'ARM Deneme Görselleştirici', dzTitle:'ARM Excel Dosyası Yükle',
+    dzSub:'Sürükle & bırak veya dokunarak seç', btnDemo:'Demo Verisiyle Dene',
+    themeLight:'☀️ Açık', themeAuto:'🔆 Otomatik', themeDark:'🌙 Koyu',
+    btnNewFile:'↑ Yeni Dosya',
+    statTrt:'Muamele', statTrtSub:'toplam', statType:'Tür', statTypeSub:'farklı tip',
+    statTiming:'Zamanlama', statTimingSub:'farklı dönem', statRate:'Ort. Doz',
+    tabTable:'📋 Muameleler', tabAnalysis:'🔍 Analiz',
+    thNo:'No', thName:'Muamele Adı', thType:'Tür', thRate:'Doz', thTiming:'Zamanlama',
+    rowHint:'Detay için satıra dokun',
+    pivotHint:'Odaklanmak istediğin metriği seç',
+    typeNumeric:'Sayısal', typeCategorical:'Kategorik', typeText:'Metin',
+    uniqueVals:'farklı değer', filled:'dolu kayıt',
+    metricSubNumeric:'Sayısal analiz', metricSubCat:'Kategorik analiz', metricSubText:'Metin listesi',
+    statMin:'Min', statMax:'Max', statAvg:'Ort.', statCount:'Dolu',
+    colValue:'Değer', colCount:'Adet', colPct:'%',
+    noData:'Veri bulunamadı', unitTrts:'muamele', fileError:'Dosya okunamadı',
+    demoName:'Demo Denemesi 2025', demoSheet:'Treatment List', labelPrefix:'Etiket',
+    dTrtNo:'Muamele No', dType:'Tür', dAI:'Aktif Madde', dGenotype:'Genotip',
+    dForm:'Formülasyon', dRate:'Doz', dOtherRate:'Diğer Doz',
+    dApplCode:'Uygulama Kodu', dApplDesc:'Uygulama Tanımı', dTiming:'Zamanlama',
+    dMinAppl:'Min. Uygulama', dApplAmt:'Uygulama Miktarı', dMixSize:'Karışım Boyutu',
+    dDilution:'Seyreltme', dSeedWeight:'1000 Tohum (g)', dRegNo:'Ruhsat No',
+    dReEntry:'Giriş Süresi', dLotCode:'Lot Kodu', dDesc:'Açıklama',
+    dComment:'Yorum', dNotebook:'Defter No',
+  },
+  en: {
+    brandTag:'ARM Trial Visualizer', dzTitle:'Upload ARM Excel File',
+    dzSub:'Drag & drop or tap to select', btnDemo:'Try with Demo Data',
+    themeLight:'☀️ Light', themeAuto:'🔆 Auto', themeDark:'🌙 Dark',
+    btnNewFile:'↑ New File',
+    statTrt:'Treatment', statTrtSub:'total', statType:'Type', statTypeSub:'different types',
+    statTiming:'Timing', statTimingSub:'different periods', statRate:'Avg. Rate',
+    tabTable:'📋 Treatments', tabAnalysis:'🔍 Analysis',
+    thNo:'No', thName:'Treatment Name', thType:'Type', thRate:'Rate', thTiming:'Timing',
+    rowHint:'Tap a row for details',
+    pivotHint:'Select a metric to focus on',
+    typeNumeric:'Numeric', typeCategorical:'Categorical', typeText:'Text',
+    uniqueVals:'unique values', filled:'filled records',
+    metricSubNumeric:'Numeric analysis', metricSubCat:'Categorical analysis', metricSubText:'Text list',
+    statMin:'Min', statMax:'Max', statAvg:'Avg.', statCount:'Filled',
+    colValue:'Value', colCount:'Count', colPct:'%',
+    noData:'No data found', unitTrts:'treatments', fileError:'Could not read file',
+    demoName:'Demo Trial 2025', demoSheet:'Treatment List', labelPrefix:'Label',
+    dTrtNo:'Treatment No', dType:'Type', dAI:'Active Ingredient', dGenotype:'Genotype',
+    dForm:'Formulation', dRate:'Rate', dOtherRate:'Other Rate',
+    dApplCode:'Application Code', dApplDesc:'Application Description', dTiming:'Timing',
+    dMinAppl:'Min. Applications', dApplAmt:'Application Amount', dMixSize:'Mix Size',
+    dDilution:'Dilution Factor', dSeedWeight:'1000 Seed Weight (g)', dRegNo:'Registration No',
+    dReEntry:'Re-Entry Interval', dLotCode:'Lot Code', dDesc:'Description',
+    dComment:'Comment', dNotebook:'Notebook No',
+  },
+  es: {
+    brandTag:'Visualizador de Ensayos ARM', dzTitle:'Cargar Archivo Excel ARM',
+    dzSub:'Arrastra y suelta o toca para seleccionar', btnDemo:'Probar con Datos Demo',
+    themeLight:'☀️ Claro', themeAuto:'🔆 Auto', themeDark:'🌙 Oscuro',
+    btnNewFile:'↑ Nuevo Archivo',
+    statTrt:'Tratamiento', statTrtSub:'total', statType:'Tipo', statTypeSub:'tipos distintos',
+    statTiming:'Momento', statTimingSub:'períodos distintos', statRate:'Dosis Prom.',
+    tabTable:'📋 Tratamientos', tabAnalysis:'🔍 Análisis',
+    thNo:'N°', thName:'Nombre del Tratamiento', thType:'Tipo', thRate:'Dosis', thTiming:'Momento',
+    rowHint:'Toca una fila para ver detalles',
+    pivotHint:'Selecciona una métrica para analizar',
+    typeNumeric:'Numérico', typeCategorical:'Categórico', typeText:'Texto',
+    uniqueVals:'valores únicos', filled:'registros llenos',
+    metricSubNumeric:'Análisis numérico', metricSubCat:'Análisis categórico', metricSubText:'Lista de texto',
+    statMin:'Mín', statMax:'Máx', statAvg:'Prom.', statCount:'Llenos',
+    colValue:'Valor', colCount:'Cantidad', colPct:'%',
+    noData:'No se encontraron datos', unitTrts:'tratamientos', fileError:'No se pudo leer el archivo',
+    demoName:'Ensayo Demo 2025', demoSheet:'Lista de Tratamientos', labelPrefix:'Etiqueta',
+    dTrtNo:'N° de Tratamiento', dType:'Tipo', dAI:'Ingrediente Activo', dGenotype:'Genotipo',
+    dForm:'Formulación', dRate:'Dosis', dOtherRate:'Otra Dosis',
+    dApplCode:'Código de Aplicación', dApplDesc:'Descripción de Aplicación', dTiming:'Momento',
+    dMinAppl:'Aplic. Mínimas', dApplAmt:'Cantidad Aplicada', dMixSize:'Tamaño de Mezcla',
+    dDilution:'Factor de Dilución', dSeedWeight:'1000 Semillas (g)', dRegNo:'N° de Registro',
+    dReEntry:'Intervalo de Reingreso', dLotCode:'Código de Lote', dDesc:'Descripción',
+    dComment:'Comentario', dNotebook:'N° de Cuaderno',
+  }
+};
+
+// ══════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════
+let treatments = [];
+let activeChart = null;
+let currentLang = 'en';
+
+// ══════════════════════════════════════════════
+//  i18n
+// ══════════════════════════════════════════════
+function t(key) { return LANG[currentLang]?.[key] ?? LANG.en[key] ?? key; }
+
+function applyLang(lang) {
+  currentLang = lang;
+  localStorage.setItem('fl_lang', lang);
+  document.documentElement.lang = lang;
+  document.querySelectorAll('[data-i18n]').forEach(el => el.textContent = t(el.dataset.i18n));
+  document.querySelectorAll('[data-lang]').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+  if (treatments.length) {
+    renderStats();
+    renderTableHeader();
+    renderTableBody();
+    if (document.getElementById('tab-pivot').classList.contains('active')) renderPivot();
+    const subEl = document.getElementById('dash-sub');
+    if (subEl.dataset.sheet) subEl.textContent = subEl.dataset.sheet + ' · ' + treatments.length + ' ' + t('unitTrts');
+  }
+}
+
+function detectLang() {
+  const s = localStorage.getItem('fl_lang');
+  if (s && LANG[s]) return s;
+  const n = (navigator.language || 'en').toLowerCase();
+  if (n.startsWith('tr')) return 'tr';
+  if (n.startsWith('es')) return 'es';
+  return 'en';
+}
+
+document.querySelectorAll('[data-lang]').forEach(b => b.addEventListener('click', () => applyLang(b.dataset.lang)));
+
+// ══════════════════════════════════════════════
+//  THEME
+// ══════════════════════════════════════════════
+function applyTheme(theme) {
+  localStorage.setItem('fl_theme', theme);
+  const dark = theme === 'dark' || (theme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+  document.querySelectorAll('[data-theme]').forEach(b => b.classList.toggle('active', b.dataset.theme === theme));
+}
+document.querySelectorAll('[data-theme]').forEach(b => b.addEventListener('click', () => applyTheme(b.dataset.theme)));
+
+// ══════════════════════════════════════════════
+//  COLUMN DEFINITIONS
+// ══════════════════════════════════════════════
+const COLS = {
+  trtNo:        ['trt no','trt no.','trt#','treatment no','treatment number'],
+  type:         ['type'],
+  name:         ['treatment name'],
+  label:        ['treatment label'],
+  formConc:     ['form conc','formulation conc'],
+  formUnit:     ['form unit','formulation unit'],
+  formType:     ['form type','formulation type'],
+  lotCode:      ['lot code'],
+  specGrav:     ['specific gravity/de','spesific gravity/de','specific gravity'],
+  regNo:        ['registration number','reg. number','reg number'],
+  reEntry:      ['re-entry interval','re-entry'],
+  desc:         ['description'],
+  idCode:       ['identification code'],
+  genotype:     ['genotype'],
+  productAI:    ['product ai'],
+  seedWeight:   ['1000 seed weight (g)','1000 seed weight','seed weight'],
+  rate:         ['rate'],
+  rateUnit:     ['rate unit'],
+  otherRate:    ['other rate'],
+  otherRateUnit:['other rate unit'],
+  minAppl:      ['min # appl','min appl','min # applications'],
+  applCode:     ['appl code','application code'],
+  applDesc:     ['appl description','application description'],
+  applTiming:   ['appl timing','application timing'],
+  cropId:       ['crop id number','crop id'],
+  cropDest:     ['crop destruction'],
+  applAmount:   ['appl amount','application amount'],
+  amountUnit:   ['amount unit'],
+  mixSize:      ['mix size'],
+  mixUnit:      ['mix unit'],
+  dilution:     ['dilution factor'],
+  eup:          ['eup'],
+  notebook:     ['notebook number'],
+  comment1:     ['comment 1','comment1'],
+};
+
+const TABLE_COLS = [
+  { key:'trtNo',         label:'Trt No.'             },
+  { key:'type',          label:'Type'                },
+  { key:'name',          label:'Treatment Name'       },
+  { key:'label',         label:'Treatment Label'      },
+  { key:'genotype',      label:'Genotype'             },
+  { key:'productAI',     label:'Product AI'           },
+  { key:'formConc',      label:'Form Conc'            },
+  { key:'formUnit',      label:'Form Unit'            },
+  { key:'formType',      label:'Form Type'            },
+  { key:'rate',          label:'Rate'                 },
+  { key:'rateUnit',      label:'Rate Unit'            },
+  { key:'otherRate',     label:'Other Rate'           },
+  { key:'otherRateUnit', label:'Other Rate Unit'      },
+  { key:'applTiming',    label:'Appl Timing'          },
+  { key:'applCode',      label:'Appl Code'            },
+  { key:'applDesc',      label:'Appl Description'     },
+  { key:'minAppl',       label:'Min # Appl'           },
+  { key:'applAmount',    label:'Appl Amount'          },
+  { key:'amountUnit',    label:'Amount Unit'          },
+  { key:'mixSize',       label:'Mix Size'             },
+  { key:'mixUnit',       label:'Mix Unit'             },
+  { key:'dilution',      label:'Dilution Factor'      },
+  { key:'seedWeight',    label:'1000 Seed Weight (g)' },
+  { key:'regNo',         label:'Registration Number'  },
+  { key:'reEntry',       label:'Re-Entry Interval'    },
+  { key:'lotCode',       label:'Lot Code'             },
+  { key:'specGrav',      label:'Specific Gravity/De'  },
+  { key:'idCode',        label:'Identification Code'  },
+  { key:'cropId',        label:'Crop ID Number'       },
+  { key:'cropDest',      label:'Crop Destruction'     },
+  { key:'eup',           label:'EUP'                  },
+  { key:'notebook',      label:'Notebook Number'      },
+  { key:'comment1',      label:'Comment 1'            },
+  { key:'desc',          label:'Description'          },
+];
+
+// Sayısal / kategorik / metin sınıflandırması
+const NUMERIC_KEYS =     ['rate','otherRate','formConc','seedWeight','dilution','applAmount','mixSize','minAppl'];
+const CATEGORICAL_KEYS = ['type','applTiming','applCode','formType','formUnit','rateUnit','otherRateUnit','amountUnit','mixUnit','cropId','cropDest','eup'];
+
+function colType(key) {
+  if (NUMERIC_KEYS.includes(key))     return 'numeric';
+  if (CATEGORICAL_KEYS.includes(key)) return 'categorical';
+  return 'text';
+}
+
+// Sütun rengi
+const TYPE_COLOR = { numeric:'var(--green)', categorical:'var(--blue)', text:'var(--muted)' };
+const TYPE_DOT   = { numeric:'#10b981',      categorical:'#388bfd',     text:'#7d8590'      };
+
+// ══════════════════════════════════════════════
+//  PARSING
+// ══════════════════════════════════════════════
+function getVal(row, colKey) {
+  for (const [key, val] of Object.entries(row)) {
+    if ((COLS[colKey] || []).some(a => key.toLowerCase().trim() === a))
+      return val != null ? String(val).trim() : '';
+  }
+  return '';
+}
+
+function normalize(rows) {
+  return rows.map(row => {
+    const o = { _raw: row };
+    for (const k of Object.keys(COLS)) o[k] = getVal(row, k);
+    return o;
+  }).filter(o => o.trtNo || o.name);
+}
+
+function getActiveCols() {
+  return TABLE_COLS.filter(col =>
+    treatments.some(tr => tr[col.key] && tr[col.key].trim() !== '')
+  );
+}
+
+// ══════════════════════════════════════════════
+//  FILE UPLOAD
+// ══════════════════════════════════════════════
+const dropZone  = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); fileInput.value=''; });
+document.getElementById('btn-new-file').addEventListener('click', () => fileInput.click());
+document.getElementById('back-btn').addEventListener('click', () => showScreen('upload'));
+document.getElementById('metric-back').addEventListener('click', () => showScreen('dash'));
+
+function loadFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      let rows = null, sheetName = '';
+      for (const name of wb.SheetNames) {
+        const data = XLSX.utils.sheet_to_json(wb.Sheets[name], { defval: '' });
+        if (data.length > 0) {
+          const keys = Object.keys(data[0]).map(k => k.toLowerCase());
+          if (keys.some(k => k.includes('trt') || k.includes('treatment'))) {
+            rows = data; sheetName = name; break;
+          }
+        }
+      }
+      if (!rows) { sheetName = wb.SheetNames[0]; rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '' }); }
+      treatments = normalize(rows);
+      openDashboard(file.name.replace(/\.[^.]+$/, ''), sheetName);
+    } catch(err) { alert(t('fileError') + ': ' + err.message); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ══════════════════════════════════════════════
+//  DEMO DATA
+// ══════════════════════════════════════════════
+document.getElementById('btn-demo').addEventListener('click', () => {
+  treatments = [
+    { trtNo:'1', type:'Herbicide',    name:'Untreated Control',    label:'UTC',     rate:'',    rateUnit:'',      applTiming:'—',      productAI:'—',            genotype:'',          formType:'',   formConc:'',  formUnit:'',    applCode:'A', applDesc:'Control plot',         comment1:'Reference' },
+    { trtNo:'2', type:'Herbicide',    name:'Glyphosate 360 SL',    label:'GLY-360', rate:'2.5', rateUnit:'L/ha',  applTiming:'POST',   productAI:'Glyphosate',   genotype:'',          formType:'SL', formConc:'360',formUnit:'g/L', applCode:'A', applDesc:'Post-em application',  comment1:'' },
+    { trtNo:'3', type:'Herbicide',    name:'Mesotrione 100 SC',    label:'MES-100', rate:'1.5', rateUnit:'L/ha',  applTiming:'PRE',    productAI:'Mesotrione',   genotype:'',          formType:'SC', formConc:'100',formUnit:'g/L', applCode:'B', applDesc:'Pre-em application',   comment1:'' },
+    { trtNo:'4', type:'Fungicide',    name:'Tebuconazole 250 EW',  label:'TEB-250', rate:'1.0', rateUnit:'L/ha',  applTiming:'POST',   productAI:'Tebuconazole', genotype:'',          formType:'EW', formConc:'250',formUnit:'g/L', applCode:'C', applDesc:'Disease control',      comment1:'' },
+    { trtNo:'5', type:'Fungicide',    name:'Azoxystrobin 250 SC',  label:'AZO-250', rate:'0.8', rateUnit:'L/ha',  applTiming:'POST',   productAI:'Azoxystrobin', genotype:'',          formType:'SC', formConc:'250',formUnit:'g/L', applCode:'C', applDesc:'Protective fungicide', comment1:'' },
+    { trtNo:'6', type:'Seed',         name:'Variety A - Standard', label:'VAR-A',   rate:'200', rateUnit:'kg/ha', applTiming:'Sowing', productAI:'—',            genotype:'Var-A-2024',formType:'SD', formConc:'',  formUnit:'',    applCode:'D', applDesc:'At sowing',            comment1:'Reference variety' },
+    { trtNo:'7', type:'Seed',         name:'Variety B - New Line', label:'VAR-B',   rate:'200', rateUnit:'kg/ha', applTiming:'Sowing', productAI:'—',            genotype:'Var-B-2024',formType:'SD', formConc:'',  formUnit:'',    applCode:'D', applDesc:'At sowing',            comment1:'New development' },
+    { trtNo:'8', type:'Insecticide',  name:'Chlorpyrifos 480 EC',  label:'CHL-480', rate:'1.2', rateUnit:'L/ha',  applTiming:'POST',   productAI:'Chlorpyrifos', genotype:'',          formType:'EC', formConc:'480',formUnit:'g/L', applCode:'E', applDesc:'Insect control',       comment1:'' },
+  ].map(r => ({ ...r, _raw: r }));
+  openDashboard(t('demoName'), t('demoSheet'));
+});
+
+// ══════════════════════════════════════════════
+//  DASHBOARD
+// ══════════════════════════════════════════════
+function openDashboard(trialName, sheetName) {
+  document.getElementById('dash-title').textContent = trialName;
+  const sub = document.getElementById('dash-sub');
+  sub.dataset.sheet = sheetName;
+  sub.textContent = sheetName + ' · ' + treatments.length + ' ' + t('unitTrts');
+  renderStats(); renderTableHeader(); renderTableBody();
+  showScreen('dash'); switchTab('table');
+}
+
+function renderStats() {
+  document.getElementById('s-trt').textContent = treatments.length;
+  document.getElementById('s-type').textContent = new Set(treatments.map(tr=>tr.type).filter(Boolean)).size || '—';
+  const timings = new Set(treatments.map(tr=>tr.applTiming).filter(v=>v&&v!=='—'));
+  document.getElementById('s-timing').textContent = timings.size || '—';
+  const rates = treatments.map(tr=>parseFloat(tr.rate)).filter(n=>!isNaN(n)&&n>0);
+  if (rates.length) {
+    document.getElementById('s-rate').textContent = (rates.reduce((a,b)=>a+b,0)/rates.length).toFixed(1);
+    document.getElementById('s-rate-unit').textContent = [...new Set(treatments.map(tr=>tr.rateUnit).filter(Boolean))][0] || '—';
+  } else { document.getElementById('s-rate').textContent='—'; document.getElementById('s-rate-unit').textContent='—'; }
+}
+
+// ══════════════════════════════════════════════
+//  FULL TABLE
+// ══════════════════════════════════════════════
+function renderTableHeader() {
+  const cols = getActiveCols();
+  document.getElementById('trt-thead').innerHTML = '<tr>' + cols.map(c=>`<th>${c.label}</th>`).join('') + '</tr>';
+}
+
+function renderTableBody() {
+  const tbody = document.getElementById('trt-tbody');
+  const cols  = getActiveCols();
+  tbody.innerHTML = '';
+  if (!treatments.length) { tbody.innerHTML=`<tr><td colspan="${cols.length}" class="empty-state">${t('noData')}</td></tr>`; return; }
+  treatments.forEach((tr, i) => {
+    const row = document.createElement('tr');
+    row.dataset.idx = i;
+    row.innerHTML = cols.map(col => {
+      const v = tr[col.key] || '—';
+      if (col.key==='trtNo')  return `<td><span class="trt-no">${v}</span></td>`;
+      if (col.key==='type')   return `<td><span class="type-badge">${v}</span></td>`;
+      if (col.key==='rate')   return `<td style="color:var(--green);font-weight:700">${v}</td>`;
+      if (col.key==='name')   return `<td style="font-weight:600">${v}</td>`;
+      if (col.key==='label')  return `<td style="color:var(--green);font-weight:600">${v}</td>`;
+      return `<td style="color:${v==='—'?'var(--muted)':'inherit'}">${v}</td>`;
+    }).join('');
+    row.addEventListener('click', () => showDetail(i));
+    tbody.appendChild(row);
+  });
+}
+
+// ══════════════════════════════════════════════
+//  TABS
+// ══════════════════════════════════════════════
+function switchTab(tab) {
+  document.getElementById('tab-table').classList.toggle('active', tab==='table');
+  document.getElementById('tab-pivot').classList.toggle('active', tab==='pivot');
+  document.getElementById('panel-table').style.display = tab==='table' ? 'block' : 'none';
+  document.getElementById('panel-pivot').style.display = tab==='pivot' ? 'block' : 'none';
+  if (tab==='pivot') renderPivot();
+}
+
+// ══════════════════════════════════════════════
+//  PIVOT GRID
+// ══════════════════════════════════════════════
+function renderPivot() {
+  const grid = document.getElementById('pivot-grid');
+  grid.innerHTML = '';
+  // trtNo hariç tüm aktif sütunlar
+  const cols = getActiveCols().filter(c => c.key !== 'trtNo');
+
+  cols.forEach(col => {
+    const type  = colType(col.key);
+    const vals  = treatments.map(tr => tr[col.key]).filter(v => v && v.trim() && v !== '—');
+
+    // Kart önizleme değeri
+    let bigVal = '—', subText = '';
+    if (type === 'numeric') {
+      const nums = vals.map(v => parseFloat(v)).filter(n => !isNaN(n));
+      if (nums.length) {
+        bigVal  = (nums.reduce((a,b)=>a+b,0)/nums.length).toFixed(1);
+        subText = `${t('statMin')} ${Math.min(...nums)} · ${t('statMax')} ${Math.max(...nums)}`;
+      }
+    } else if (type === 'categorical') {
+      const uniq = new Set(vals).size;
+      bigVal  = uniq;
+      subText = t('uniqueVals');
+    } else {
+      bigVal  = vals.length;
+      subText = t('filled');
+    }
+
+    const card = document.createElement('div');
+    card.className = 'pivot-card';
+    card.innerHTML = `
+      <div class="pivot-type-dot" style="background:${TYPE_DOT[type]}"></div>
+      <div class="pivot-card-label">${col.label}</div>
+      <div class="pivot-card-value" style="color:${TYPE_COLOR[type]}">${bigVal}</div>
+      <div class="pivot-card-sub">${subText}</div>`;
+    card.addEventListener('click', () => openMetric(col.key));
+    grid.appendChild(card);
+  });
+}
+
+// ══════════════════════════════════════════════
+//  METRIC DETAIL
+// ══════════════════════════════════════════════
+function openMetric(colKey) {
+  const col  = TABLE_COLS.find(c => c.key === colKey);
+  const type = colType(colKey);
+  document.getElementById('metric-title').textContent = col.label;
+  document.getElementById('metric-sub').textContent   = t(type==='numeric'?'metricSubNumeric':type==='categorical'?'metricSubCat':'metricSubText');
+
+  // Önceki chart'ı temizle
+  if (activeChart) { activeChart.destroy(); activeChart = null; }
+
+  const body = document.getElementById('metric-body');
+  body.innerHTML = '';
+
+  const rows = treatments.map(tr => ({
+    trtNo: tr.trtNo, name: tr.name, label: tr.label, val: tr[colKey]
+  })).filter(r => r.val && r.val.trim() && r.val !== '—');
+
+  if (type === 'numeric')     renderNumericMetric(col, rows, body);
+  else if (type === 'categorical') renderCategoricalMetric(col, rows, body);
+  else renderTextMetric(col, rows, body);
+
+  showScreen('metric');
+}
+
+function renderNumericMetric(col, rows, body) {
+  const nums = rows.map(r => parseFloat(r.val)).filter(n => !isNaN(n));
+  if (!nums.length) { body.innerHTML = `<p class="empty-state">${t('noData')}</p>`; return; }
+
+  const avg = nums.reduce((a,b)=>a+b,0)/nums.length;
+  const min = Math.min(...nums), max = Math.max(...nums);
+
+  // Mini istatistik kartları
+  const statsDiv = document.createElement('div');
+  statsDiv.className = 'mini-stat-row';
+  statsDiv.innerHTML = [
+    [t('statCount'), nums.length],
+    [t('statMin'),   min],
+    [t('statMax'),   max],
+    [t('statAvg'),   avg.toFixed(2)],
+  ].map(([l,v]) => `<div class="mini-stat"><div class="mini-stat-label">${l}</div><div class="mini-stat-val">${v}</div></div>`).join('');
+  body.appendChild(statsDiv);
+
+  // Yatay bar chart
+  const chartDiv = document.createElement('div');
+  chartDiv.className = 'chart-card';
+  chartDiv.innerHTML = `<div class="chart-title">${col.label}</div><canvas id="metric-canvas"></canvas>`;
+  body.appendChild(chartDiv);
+
+  const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+  const gridC  = isDark ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.07)';
+  const tickC  = isDark ? '#7d8590' : '#656d76';
+
+  const labels = rows.map(r => r.label || r.name || `#${r.trtNo}`);
+  const values = rows.map(r => parseFloat(r.val) || 0);
+  const colors = values.map(v => v >= avg ? '#10b981' : '#388bfd');
+
+  setTimeout(() => {
+    activeChart = new Chart(document.getElementById('metric-canvas'), {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{ data: values, backgroundColor: colors, borderRadius: 6, borderSkipped: false }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.x}` } }
+        },
+        scales: {
+          x: { ticks:{color:tickC}, grid:{color:gridC}, beginAtZero:true },
+          y: { ticks:{color:tickC,font:{size:10}}, grid:{display:false} }
+        }
+      }
+    });
+  }, 50);
+}
+
+function renderCategoricalMetric(col, rows, body) {
+  // Frekans tablosu
+  const counts = {};
+  rows.forEach(r => { counts[r.val] = (counts[r.val]||0)+1; });
+  const total   = rows.length;
+  const sorted  = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+  const isDark  = document.documentElement.getAttribute('data-theme') !== 'light';
+  const tickC   = isDark ? '#7d8590' : '#656d76';
+  const PALETTE = ['#10b981','#388bfd','#f59e0b','#f85149','#8b5cf6','#06b6d4','#f97316','#84cc16'];
+
+  // Donut chart
+  const chartDiv = document.createElement('div');
+  chartDiv.className = 'chart-card';
+  chartDiv.innerHTML = `<div class="chart-title">${col.label}</div><canvas id="metric-canvas"></canvas>`;
+  body.appendChild(chartDiv);
+
+  setTimeout(() => {
+    activeChart = new Chart(document.getElementById('metric-canvas'), {
+      type: 'doughnut',
+      data: {
+        labels: sorted.map(([k])=>k),
+        datasets: [{ data: sorted.map(([,v])=>v), backgroundColor: sorted.map((_,i)=>PALETTE[i%PALETTE.length]), borderWidth:0, hoverOffset:8 }]
+      },
+      options: {
+        responsive: true, cutout:'62%',
+        plugins: { legend: { position:'bottom', labels:{color:tickC,padding:14,font:{size:11}} } }
+      }
+    });
+  }, 50);
+
+  // Frekans tablosu
+  const freqDiv = document.createElement('div');
+  freqDiv.className = 'freq-table-wrap';
+  const maxCount = sorted[0]?.[1] || 1;
+  freqDiv.innerHTML = `
+    <table class="freq-table">
+      <thead><tr><th>${t('colValue')}</th><th>${t('colCount')}</th><th>${t('colPct')}</th></tr></thead>
+      <tbody>
+        ${sorted.map(([val,cnt],i)=>`
+          <tr>
+            <td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${PALETTE[i%PALETTE.length]};margin-right:7px"></span>${val}</td>
+            <td><strong>${cnt}</strong><div class="freq-bar-bg"><div class="freq-bar-fill" style="width:${(cnt/maxCount*100).toFixed(0)}%;background:${PALETTE[i%PALETTE.length]}"></div></div></td>
+            <td>${(cnt/total*100).toFixed(1)}%</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+  body.appendChild(freqDiv);
+}
+
+function renderTextMetric(col, rows, body) {
+  // Önce unique value kontrolü — az sayıda tekrar varsa kategorik gibi göster
+  const counts = {};
+  rows.forEach(r => { counts[r.val] = (counts[r.val]||0)+1; });
+  const unique = Object.keys(counts).length;
+
+  if (unique <= rows.length * 0.6 && unique <= 15) {
+    // Tekrar var — kategorik gibi davran
+    renderCategoricalMetric(col, rows, body);
+    return;
+  }
+
+  // Her değer eşsiz — liste görünümü
+  const listDiv = document.createElement('div');
+  listDiv.className = 'text-list';
+  listDiv.innerHTML = rows.map(r => `
+    <div class="text-item">
+      <span class="text-item-no">${r.trtNo || '?'}</span>
+      <div style="flex:1;min-width:0">
+        <div class="text-item-name">${r.name || ''}</div>
+        <div class="text-item-val">${r.val}</div>
+      </div>
+    </div>`).join('');
+  body.appendChild(listDiv);
+}
+
+// ══════════════════════════════════════════════
+//  DETAIL MODAL (table row tap)
+// ══════════════════════════════════════════════
+function showDetail(idx) {
+  const tr = treatments[idx];
+  document.getElementById('modal-name').textContent  = tr.name || `Treatment ${tr.trtNo}`;
+  document.getElementById('modal-label').textContent = tr.label ? `${t('labelPrefix')}: ${tr.label}` : '';
+
+  const fields = [
+    [t('dTrtNo'),      tr.trtNo],
+    [t('dType'),       tr.type],
+    [t('dAI'),         tr.productAI],
+    [t('dGenotype'),   tr.genotype],
+    [t('dForm'),       [tr.formConc,tr.formUnit,tr.formType].filter(Boolean).join(' ')||null],
+    [t('dRate'),       tr.rate ? `${tr.rate} ${tr.rateUnit}`.trim() : null],
+    [t('dOtherRate'),  tr.otherRate ? `${tr.otherRate} ${tr.otherRateUnit}`.trim() : null],
+    [t('dApplCode'),   tr.applCode],
+    [t('dApplDesc'),   tr.applDesc],
+    [t('dTiming'),     tr.applTiming],
+    [t('dMinAppl'),    tr.minAppl],
+    [t('dApplAmt'),    tr.applAmount ? `${tr.applAmount} ${tr.amountUnit}`.trim() : null],
+    [t('dMixSize'),    tr.mixSize ? `${tr.mixSize} ${tr.mixUnit}`.trim() : null],
+    [t('dDilution'),   tr.dilution],
+    [t('dSeedWeight'), tr.seedWeight],
+    [t('dRegNo'),      tr.regNo],
+    [t('dReEntry'),    tr.reEntry],
+    [t('dLotCode'),    tr.lotCode],
+    [t('dDesc'),       tr.desc],
+    [t('dComment'),    tr.comment1],
+    [t('dNotebook'),   tr.notebook],
+  ].filter(([,v]) => v && String(v).trim());
+
+  document.getElementById('modal-body').innerHTML = fields.map(([k,v]) =>
+    `<div class="detail-row"><span class="detail-key">${k}</span><span class="detail-val">${v}</span></div>`
+  ).join('');
+  document.getElementById('modal').classList.add('open');
+}
+document.getElementById('modal').addEventListener('click', e => {
+  if (e.target.id==='modal') document.getElementById('modal').classList.remove('open');
+});
+
+// ══════════════════════════════════════════════
+//  NAVIGATION
+// ══════════════════════════════════════════════
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + name).classList.add('active');
+}
+
+// ══════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════
+applyTheme(localStorage.getItem('fl_theme') || 'auto');
+applyLang(detectLang());
+</script>
+</body>
+</html>
